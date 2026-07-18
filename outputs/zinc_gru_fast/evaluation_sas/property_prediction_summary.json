@@ -1,0 +1,14 @@
+[
+  {
+    "representation": "RDKit descriptors",
+    "r2": 0.04073456036912848,
+    "rmse": 0.5714594960238395,
+    "mae": 0.48375944791052417
+  },
+  {
+    "representation": "Seq2Seq encoder embedding",
+    "r2": 0.09524029628626085,
+    "rmse": 0.5549868330362432,
+    "mae": 0.44562068137024435
+  }
+]
