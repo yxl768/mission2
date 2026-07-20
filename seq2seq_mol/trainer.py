@@ -123,11 +123,9 @@ def translation_metrics(model, loader, src_tokenizer, tgt_tokenizer, device, max
 
 def build_model(args, src_vocab_size, tgt_vocab_size, src_pad_id):
     if args.model_type == "gru":
-        return Seq2SeqGRU(
-            GRUEncoder(src_vocab_size, args.embed_size, args.hidden_size, args.num_layers, args.dropout),
-            GRUDecoder(tgt_vocab_size, args.embed_size, args.hidden_size, args.num_layers, args.dropout),
-            src_pad_id,
-        )
+        encoder = GRUEncoder(src_vocab_size, args.embed_size, args.hidden_size, args.num_layers, args.dropout, bidirectional=True)
+        decoder = GRUDecoder(tgt_vocab_size, args.embed_size, args.hidden_size, args.num_layers, args.dropout)
+        return Seq2SeqGRU(encoder, decoder, src_pad_id)
     if args.embed_size % args.num_heads:
         raise ValueError("--embed-size must be divisible by --num-heads for a Transformer.")
     return TransformerSeq2Seq(
@@ -141,18 +139,20 @@ def parse_args():
     parser.add_argument("--data", required=True, help="Processed CSV produced by build_dataset.py")
     parser.add_argument("--output", default="outputs")
     parser.add_argument("--model-type", choices=["gru", "transformer"], default="gru")
-    parser.add_argument("--epochs", type=int, default=20)
-    parser.add_argument("--batch-size", type=int, default=64)
-    parser.add_argument("--embed-size", type=int, default=256)
-    parser.add_argument("--hidden-size", type=int, default=256)
+    parser.add_argument("--epochs", type=int, default=100)
+    parser.add_argument("--batch-size", type=int, default=32)
+    parser.add_argument("--embed-size", type=int, default=128)
+    parser.add_argument("--hidden-size", type=int, default=128)
     parser.add_argument("--num-layers", type=int, default=2)
-    parser.add_argument("--num-heads", type=int, default=8)
-    parser.add_argument("--dropout", type=float, default=0.1)
+    parser.add_argument("--num-heads", type=int, default=4)
+    parser.add_argument("--dropout", type=float, default=0.2)
     parser.add_argument("--learning-rate", type=float, default=1e-3)
     parser.add_argument("--validation-fraction", type=float, default=0.1)
     parser.add_argument("--max-decode-length", type=int, default=128)
     parser.add_argument("--max-samples", type=int, default=None)
     parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument("--patience", type=int, default=10, help="Early stopping patience")
+    parser.add_argument("--lr-factor", type=float, default=0.5, help="Learning rate decay factor")
     return parser.parse_args()
 
 
@@ -184,21 +184,30 @@ def main():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = build_model(args, len(src_tokenizer.vocab), len(tgt_tokenizer.vocab), src_tokenizer.pad_id).to(device)
     optimizer = torch.optim.AdamW(model.parameters(), lr=args.learning_rate)
+    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode="min", factor=args.lr_factor, patience=args.patience // 2, min_lr=1e-6)
     criterion = nn.CrossEntropyLoss(ignore_index=tgt_tokenizer.pad_id)
     history, best_loss = [], float("inf")
     checkpoint_path = os.path.join(args.output, "best_model.pt")
+    patience_counter = 0
 
     for epoch in range(1, args.epochs + 1):
         train_loss = run_epoch(model, train_loader, criterion, device, optimizer)
         validation_loss = run_epoch(model, validation_loader, criterion, device)
+        scheduler.step(validation_loss)
         history.append({"epoch": epoch, "train_loss": train_loss, "validation_loss": validation_loss})
-        print(f"Epoch {epoch}/{args.epochs}: train_loss={train_loss:.4f}, validation_loss={validation_loss:.4f}")
+        print(f"Epoch {epoch}/{args.epochs}: train_loss={train_loss:.4f}, validation_loss={validation_loss:.4f}, lr={optimizer.param_groups[0]['lr']:.6f}")
         if validation_loss < best_loss:
             best_loss = validation_loss
+            patience_counter = 0
             torch.save({
                 "model_state": model.state_dict(), "model_type": args.model_type,
                 "model_args": vars(args), "src_vocab": src_tokenizer.vocab, "tgt_vocab": tgt_tokenizer.vocab,
             }, checkpoint_path)
+        else:
+            patience_counter += 1
+            if patience_counter >= args.patience:
+                print(f"Early stopping after {epoch} epochs with patience {args.patience}")
+                break
 
     best_checkpoint = torch.load(checkpoint_path, map_location=device)
     model.load_state_dict(best_checkpoint["model_state"])

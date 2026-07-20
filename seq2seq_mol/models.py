@@ -7,7 +7,7 @@ import torch.nn as nn
 
 
 class GRUEncoder(nn.Module):
-    def __init__(self, vocab_size, embed_size, hidden_size, num_layers=1, dropout=0.1):
+    def __init__(self, vocab_size, embed_size, hidden_size, num_layers=1, dropout=0.1, bidirectional=True):
         super().__init__()
         self.embedding = nn.Embedding(vocab_size, embed_size)
         self.gru = nn.GRU(
@@ -16,7 +16,9 @@ class GRUEncoder(nn.Module):
             num_layers=num_layers,
             batch_first=True,
             dropout=dropout if num_layers > 1 else 0.0,
+            bidirectional=bidirectional,
         )
+        self.bidirectional = bidirectional
 
     def forward(self, input_ids, lengths):
         embedded = self.embedding(input_ids)
@@ -53,19 +55,41 @@ class Seq2SeqGRU(nn.Module):
         self.encoder = encoder
         self.decoder = decoder
         self.pad_id = pad_id
+        if encoder.bidirectional:
+            self.hidden_projection = nn.Linear(encoder.gru.hidden_size * 2, decoder.gru.hidden_size)
+        else:
+            self.hidden_projection = None
+
+    def _combine_bidirectional(self, hidden):
+        if self.encoder.bidirectional:
+            num_layers = hidden.size(0) // 2
+            hidden = hidden.view(num_layers, 2, hidden.size(1), hidden.size(2))
+            forward = hidden[:, 0]
+            backward = hidden[:, 1]
+            combined = torch.cat([forward, backward], dim=-1)
+            if self.hidden_projection is not None:
+                combined = self.hidden_projection(combined)
+            return combined
+        return hidden
 
     def forward(self, src_ids, tgt_ids, src_lengths=None):
         hidden = self.encoder(src_ids, src_lengths)
-        logits, _ = self.decoder(tgt_ids[:, :-1], hidden)
+        decoder_hidden = self._combine_bidirectional(hidden)
+        logits, _ = self.decoder(tgt_ids[:, :-1], decoder_hidden)
         return logits
 
     def encode(self, src_ids, src_lengths):
-        # The final layer's state is the fixed-dimensional molecular embedding.
-        return self.encoder(src_ids, src_lengths)[-1]
+        hidden = self.encoder(src_ids, src_lengths)
+        if self.encoder.bidirectional:
+            final_hidden = hidden[-2:]
+            combined = torch.cat([final_hidden[0], final_hidden[1]], dim=-1)
+            return combined
+        return hidden[-1]
 
     @torch.no_grad()
     def generate(self, src_ids, src_lengths, bos_id, eos_id, max_length=128):
         hidden = self.encoder(src_ids, src_lengths)
+        hidden = self._combine_bidirectional(hidden)
         next_ids = torch.full((src_ids.size(0), 1), bos_id, dtype=torch.long, device=src_ids.device)
         finished = torch.zeros(src_ids.size(0), dtype=torch.bool, device=src_ids.device)
         generated = []

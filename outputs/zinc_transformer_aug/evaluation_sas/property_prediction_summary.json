@@ -1,0 +1,32 @@
+[
+  {
+    "representation": "RDKit descriptors",
+    "r2": 0.04073456036912848,
+    "rmse": 0.5714594960238395,
+    "mae": 0.4837594479105241,
+    "kfold_r2_mean": -0.009927586774230335,
+    "kfold_r2_std": 0.18218472970925348,
+    "kfold_rmse_mean": 0.5580115324138042,
+    "kfold_rmse_std": 0.04287713274423061
+  },
+  {
+    "representation": "Morgan fingerprint (ECFP4)",
+    "r2": 0.3726852000418319,
+    "rmse": 0.4621243170140543,
+    "mae": 0.33964992489904666,
+    "kfold_r2_mean": 0.24165024230795845,
+    "kfold_r2_std": 0.18022534483168445,
+    "kfold_rmse_mean": 0.48091926525101913,
+    "kfold_rmse_std": 0.03191188885373324
+  },
+  {
+    "representation": "Seq2Seq encoder embedding",
+    "r2": 0.640428059600831,
+    "rmse": 0.3498718099545803,
+    "mae": 0.28527478245163584,
+    "kfold_r2_mean": 0.5401128658123296,
+    "kfold_r2_std": 0.20032213750648772,
+    "kfold_rmse_mean": 0.365392718661003,
+    "kfold_rmse_std": 0.04072818783292901
+  }
+]
