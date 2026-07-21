@@ -1,0 +1,33 @@
+{
+  "greedy_token_accuracy": 0.23990498812351543,
+  "greedy_exact_match": 0.0,
+  "validation_examples": 21,
+  "samples": [
+    {
+      "iupac": "(5S)-3'-[2-[(2S)-2-methyl-2,3-dihydroindol-1-yl]-2-oxoethyl]spiro[6,7,8,9-tetrahydrobenzo[7]annulene-5,5'-imidazolidine]-2',4'-dione",
+      "reference_selfies": "[C][C@H1][C][C][=C][C][=C][C][=C][Ring1][=Branch1][N][Ring1][=Branch2][C][=Branch1][C][=O][C][N][C][=Branch1][C][=O][N][C@][Branch1][#C][C][C][C][C][C][=C][C][=C][C][=C][Ring1][=Branch1][Ring1][O][C][Ring1][S][=O]",
+      "predicted_selfies_greedy": "[C][C][=C][C][=C][C][=C][Branch2][Ring1][=Branch1][C][C][C][C][C][=C][C][=C][C][=C][Ring1][=Branch1][C][=C][C][=C][Ring1][=Branch1][C][=C][C][=C][Ring1][=Branch1][C][=C][Ring1][=Branch1][C][=C][Ring1][=Branch1]"
+    },
+    {
+      "iupac": "(4R)-3-(3,3-dimethylbutanoyl)-N-[(1R)-1-pyridin-2-ylethyl]-1,3-thiazolidine-4-carboxamide",
+      "reference_selfies": "[C][C@@H1][Branch2][Ring1][#Branch2][N][C][=Branch1][C][=O][C@@H1][C][S][C][N][Ring1][Branch1][C][=Branch1][C][=O][C][C][Branch1][C][C][Branch1][C][C][C][C][=C][C][=C][C][=N][Ring1][=Branch1]",
+      "predicted_selfies_greedy": "[C][C][=C][C][=C][Branch2][Ring1][Branch2][C][C][C][C][C][C][C][C][C][=C][C][=C][C][=C][Ring1][=Branch1][C][C][C][Ring1][=Branch1][C][=C][C][=C][Ring1][=Branch1][C][=C][C][=C][Ring1][=Branch1][C][=C][Ring1][=Branch1][C][C][Ring1][=Branch1]"
+    },
+    {
+      "iupac": "5,6-dimethyl-3-propylthieno[2,3-d]pyrimidin-4-one",
+      "reference_selfies": "[C][C][C][N][C][=N][C][S][C][Branch1][C][C][=C][Branch1][C][C][C][=Ring1][#Branch1][C][Ring1][O][=O]",
+      "predicted_selfies_greedy": "[C][C][=C][C][=C][C][=C][Branch2][Ring1][=Branch1][C][C][C][C][=C][C][=C][C][=C][Ring1][=Branch1][C][=C][C][=C][Ring1][=Branch1][C][=C][C][=C][Ring1][=Branch1][C][=C][Ring1][=Branch1]"
+    },
+    {
+      "iupac": "2-[4-[4-(4-chlorophenyl)-5-(trifluoromethyl)-1H-pyrazol-3-yl]-3-hydroxyphenoxy]acetohydrazide",
+      "reference_selfies": "[N][N][C][=Branch1][C][=O][C][O][C][=C][C][=C][Branch2][Ring1][=N][C][=N][NH1][C][Branch1][=Branch2][C][Branch1][C][F][Branch1][C][F][F][=C][Ring1][=Branch2][C][=C][C][=C][Branch1][C][Cl][C][=C][Ring1][#Branch1][C][Branch1][C][O][=C][Ring2][Ring1][#Branch1]",
+      "predicted_selfies_greedy": "[C][C][=C][C][=C][Branch2][Ring1][Branch2][C][C][C][C][C][C][C][C][=C][C][=C][Branch1][C][C][C][=C][C][=C][Ring1][=Branch1][C][=C][C][=C][Ring1][=Branch1][C][=C][Ring1][=Branch1][C][=C][Ring1][=Branch1][C][=C][Ring1][=Branch1]"
+    },
+    {
+      "iupac": "2-[[(1S)-1-(4-chlorophenyl)propyl]carbamoylamino]-N-(furan-2-ylmethyl)acetamide",
+      "reference_selfies": "[C][C][C@H1][Branch2][Ring1][Branch1][N][C][=Branch1][C][=O][N][C][C][=Branch1][C][=O][N][C][C][=C][C][=C][O][Ring1][Branch1][C][=C][C][=C][Branch1][C][Cl][C][=C][Ring1][#Branch1]",
+      "predicted_selfies_greedy": "[C][C][=C][C][=C][Branch2][Ring1][Branch2][C][C][C][C][C][C][C][C][C][C][=C][C][=C][Ring1][=Branch1][C][C][C][Ring1][=Branch1][C][=C][C][=C][Ring1][=Branch1][C][=C][C][=C][Ring1][=Branch1][C][=C][Ring1][=Branch1][C][C][Ring1][=Branch1]"
+    }
+  ],
+  "best_validation_loss": 1.5855698585510254
+}

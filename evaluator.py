@@ -11,7 +11,7 @@ from sklearn.decomposition import PCA
 from sklearn.linear_model import Ridge
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 from sklearn.model_selection import GroupKFold, KFold, train_test_split
-from sklearn.pipeline import make_pipeline
+from sklearn.pipeline import Pipeline, make_pipeline
 from sklearn.preprocessing import StandardScaler
 
 from seq2seq_mol.data_utils import IUPAC_COLUMN, SMILES_COLUMN, enrich_with_descriptors, load_dataframe
@@ -89,8 +89,12 @@ def compute_morgan_fingerprints(smiles_list, radius=MORGAN_RADIUS, n_bits=MORGAN
     return fingerprints
 
 
-def fit_and_score(features, target, train_indices, test_indices, alpha):
-    model = make_pipeline(StandardScaler(), Ridge(alpha=alpha))
+def fit_and_score(features, target, train_indices, test_indices, alpha, pca_components=None):
+    steps = []
+    if pca_components is not None and pca_components < features.shape[1]:
+        steps.append(("pca", PCA(n_components=pca_components, random_state=0)))
+    steps.extend([("scaler", StandardScaler()), ("ridge", Ridge(alpha=alpha))])
+    model = Pipeline(steps)
     model.fit(features[train_indices], target[train_indices])
     predicted = model.predict(features[test_indices])
     truth = target[test_indices]
@@ -101,12 +105,12 @@ def fit_and_score(features, target, train_indices, test_indices, alpha):
     }, truth, predicted
 
 
-def kfold_eval(features, target, alpha, n_splits=5, seed=42):
+def kfold_eval(features, target, alpha, n_splits=5, seed=42, pca_components=None):
     """Run k-fold cross-validation and return mean/std metrics."""
     kf = KFold(n_splits=n_splits, shuffle=True, random_state=seed)
     metrics_list = []
     for train_idx, test_idx in kf.split(features):
-        metrics, _, _ = fit_and_score(features, target, train_idx, test_idx, alpha)
+        metrics, _, _ = fit_and_score(features, target, train_idx, test_idx, alpha, pca_components)
         metrics_list.append(metrics)
     mean_metrics = {
         key: float(np.mean([m[key] for m in metrics_list]))
@@ -146,7 +150,7 @@ def plot_predictions(results, path):
 
 
 def compare_representations(data_path, embeddings_path, output_dir, property_name="LogP",
-                            test_fraction=0.2, seed=42, alpha=1.0, n_folds=5, deduplicate=True):
+                            test_fraction=0.2, seed=42, alpha=1.0, n_folds=5, deduplicate=True, pca_components=None):
     if not 0.0 < test_fraction < 1.0:
         raise ValueError("--test-fraction must be between 0 and 1.")
     os.makedirs(output_dir, exist_ok=True)
@@ -181,13 +185,13 @@ def compare_representations(data_path, embeddings_path, output_dir, property_nam
     )
     desc_metrics, desc_truth, desc_prediction = fit_and_score(descriptors, target, train_indices, test_indices, alpha)
     morgan_metrics, morgan_truth, morgan_prediction = fit_and_score(morgan_fps, target, train_indices, test_indices, alpha)
-    emb_metrics, emb_truth, emb_prediction = fit_and_score(embeddings, target, train_indices, test_indices, alpha)
+    emb_metrics, emb_truth, emb_prediction = fit_and_score(embeddings, target, train_indices, test_indices, alpha, pca_components)
 
     # k-fold cross-validation
     print(f"\n=== {n_folds}-Fold Cross-Validation for {property_name} ===")
     desc_mean, desc_std, _ = kfold_eval(descriptors, target, alpha, n_folds, seed)
     morgan_mean, morgan_std, _ = kfold_eval(morgan_fps, target, alpha, n_folds, seed)
-    emb_mean, emb_std, _ = kfold_eval(embeddings, target, alpha, n_folds, seed)
+    emb_mean, emb_std, _ = kfold_eval(embeddings, target, alpha, n_folds, seed, pca_components)
 
     summary = pd.DataFrame([
         {"representation": "RDKit descriptors", **desc_metrics,
@@ -235,6 +239,8 @@ def parse_args():
     parser.add_argument("--n-folds", type=int, default=5, help="Number of folds for cross-validation")
     parser.add_argument("--no-deduplicate", action="store_true",
                         help="Disable deduplication by IUPAC name (leaves augmented data as-is)")
+    parser.add_argument("--pca-components", type=int, default=None,
+                        help="Number of PCA components to reduce embeddings to before regression")
     return parser.parse_args()
 
 
@@ -244,4 +250,5 @@ if __name__ == "__main__":
         args.data, args.embeddings, args.output, args.property,
         args.test_fraction, args.seed, args.ridge_alpha, args.n_folds,
         deduplicate=not args.no_deduplicate,
+        pca_components=args.pca_components,
     )

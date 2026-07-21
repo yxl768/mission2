@@ -85,40 +85,73 @@ def extract_embeddings(model, loader, device):
 
 
 @torch.no_grad()
-def translation_metrics(model, loader, src_tokenizer, tgt_tokenizer, device, max_decode_length):
-    """Report greedy exact-match rate and token accuracy on held-out examples."""
-    model.eval()
+def _compute_metrics(generated, source_cpu, target_cpu, src_tokenizer, tgt_tokenizer, samples, prefix):
     correct_tokens = total_tokens = exact = examples = 0
+    for source_ids, target_ids, output_ids in zip(source_cpu, target_cpu, generated.cpu()):
+        reference = [x for x in target_ids.tolist()[1:] if x not in {tgt_tokenizer.pad_id, tgt_tokenizer.eos_id}]
+        prediction = []
+        for token in output_ids.tolist():
+            if token == tgt_tokenizer.eos_id:
+                break
+            if token != tgt_tokenizer.pad_id:
+                prediction.append(token)
+        total_tokens += len(reference)
+        correct_tokens += sum(a == b for a, b in zip(reference, prediction))
+        exact += int(reference == prediction)
+        examples += 1
+        if len(samples) < 5:
+            samples.append({
+                "iupac": src_tokenizer.decode(source_ids.tolist()),
+                "reference_selfies": tgt_tokenizer.decode(reference),
+                f"predicted_selfies_{prefix}": tgt_tokenizer.decode(prediction),
+            })
+    return correct_tokens, total_tokens, exact, examples
+
+
+@torch.no_grad()
+def translation_metrics(model, loader, src_tokenizer, tgt_tokenizer, device, max_decode_length, beam_size=0):
+    """Report greedy and beam-search exact-match rate and token accuracy."""
+    model.eval()
     samples = []
+    
+    greedy_correct = greedy_total = greedy_exact = greedy_examples = 0
     for batch in loader:
         source = batch["src_ids"].to(device)
         target = batch["tgt_ids"].to(device)
         lengths = batch["src_lengths"].to(device)
         generated = model.generate(source, lengths, tgt_tokenizer.bos_id, tgt_tokenizer.eos_id, max_decode_length)
-        for source_ids, target_ids, output_ids in zip(source.cpu(), target.cpu(), generated.cpu()):
-            reference = [x for x in target_ids.tolist()[1:] if x not in {tgt_tokenizer.pad_id, tgt_tokenizer.eos_id}]
-            prediction = []
-            for token in output_ids.tolist():
-                if token == tgt_tokenizer.eos_id:
-                    break
-                if token != tgt_tokenizer.pad_id:
-                    prediction.append(token)
-            total_tokens += len(reference)
-            correct_tokens += sum(a == b for a, b in zip(reference, prediction))
-            exact += int(reference == prediction)
-            examples += 1
-            if len(samples) < 10:
-                samples.append({
-                    "iupac": src_tokenizer.decode(source_ids.tolist()),
-                    "reference_selfies": tgt_tokenizer.decode(reference),
-                    "predicted_selfies": tgt_tokenizer.decode(prediction),
-                })
-    return {
-        "greedy_token_accuracy": correct_tokens / max(total_tokens, 1),
-        "greedy_exact_match": exact / max(examples, 1),
-        "validation_examples": examples,
+        c, t, e, ex = _compute_metrics(generated, source.cpu(), target.cpu(), src_tokenizer, tgt_tokenizer, samples, "greedy")
+        greedy_correct += c
+        greedy_total += t
+        greedy_exact += e
+        greedy_examples += ex
+
+    result = {
+        "greedy_token_accuracy": greedy_correct / max(greedy_total, 1),
+        "greedy_exact_match": greedy_exact / max(greedy_examples, 1),
+        "validation_examples": greedy_examples,
         "samples": samples,
     }
+
+    if beam_size > 0:
+        beam_correct = beam_total = beam_exact = beam_examples = 0
+        for batch in loader:
+            source = batch["src_ids"].to(device)
+            target = batch["tgt_ids"].to(device)
+            lengths = batch["src_lengths"].to(device)
+            generated = model.generate_beam_search(source, lengths, tgt_tokenizer.bos_id, tgt_tokenizer.eos_id, max_decode_length, beam_size)
+            c, t, e, ex = _compute_metrics(generated, source.cpu(), target.cpu(), src_tokenizer, tgt_tokenizer, samples, "beam")
+            beam_correct += c
+            beam_total += t
+            beam_exact += e
+            beam_examples += ex
+        result.update({
+            "beam_token_accuracy": beam_correct / max(beam_total, 1),
+            "beam_exact_match": beam_exact / max(beam_examples, 1),
+            "beam_size": beam_size,
+        })
+
+    return result
 
 
 def build_model(args, src_vocab_size, tgt_vocab_size, src_pad_id):
@@ -139,20 +172,22 @@ def parse_args():
     parser.add_argument("--data", required=True, help="Processed CSV produced by build_dataset.py")
     parser.add_argument("--output", default="outputs")
     parser.add_argument("--model-type", choices=["gru", "transformer"], default="gru")
-    parser.add_argument("--epochs", type=int, default=100)
-    parser.add_argument("--batch-size", type=int, default=32)
-    parser.add_argument("--embed-size", type=int, default=128)
-    parser.add_argument("--hidden-size", type=int, default=128)
-    parser.add_argument("--num-layers", type=int, default=2)
-    parser.add_argument("--num-heads", type=int, default=4)
+    parser.add_argument("--epochs", type=int, default=30, help="减少epochs缩短训练时间")
+    parser.add_argument("--batch-size", type=int, default=64, help="增大batch_size提高训练效率")
+    parser.add_argument("--embed-size", type=int, default=64, help="减小嵌入维度")
+    parser.add_argument("--hidden-size", type=int, default=64, help="减小隐藏层维度")
+    parser.add_argument("--num-layers", type=int, default=1, help="减少网络层数")
+    parser.add_argument("--num-heads", type=int, default=2, help="减少Transformer头数")
     parser.add_argument("--dropout", type=float, default=0.2)
     parser.add_argument("--learning-rate", type=float, default=1e-3)
     parser.add_argument("--validation-fraction", type=float, default=0.1)
     parser.add_argument("--max-decode-length", type=int, default=128)
     parser.add_argument("--max-samples", type=int, default=None)
     parser.add_argument("--seed", type=int, default=42)
-    parser.add_argument("--patience", type=int, default=10, help="Early stopping patience")
+    parser.add_argument("--patience", type=int, default=8, help="Early stopping patience")
     parser.add_argument("--lr-factor", type=float, default=0.5, help="Learning rate decay factor")
+    parser.add_argument("--eval-interval", type=int, default=1, help="每N个epoch验证一次")
+    parser.add_argument("--beam-size", type=int, default=0, help="beam search大小，0为不使用")
     return parser.parse_args()
 
 
